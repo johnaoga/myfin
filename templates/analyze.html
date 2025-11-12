@@ -1,0 +1,345 @@
+{% extends "base.html" %}
+
+{% block title %}Analyze - MyFin{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div>
+        <h1 class="text-3xl font-bold text-gray-900">Transaction Analysis</h1>
+        <p class="mt-2 text-sm text-gray-600">Filter, sort, and categorize your transactions</p>
+    </div>
+
+    <!-- Filters -->
+    <div class="bg-white shadow-sm rounded-lg p-6">
+        <form method="GET" action="{{ url_for('analyze') }}" class="space-y-4">
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+                <div>
+                    <label for="type" class="block text-sm font-medium text-gray-700">Type</label>
+                    <select id="type" name="type" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+                        <option value="all" {% if transaction_type == 'all' %}selected{% endif %}>All</option>
+                        <option value="in" {% if transaction_type == 'in' %}selected{% endif %}>Income</option>
+                        <option value="out" {% if transaction_type == 'out' %}selected{% endif %}>Expenses</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label for="search" class="block text-sm font-medium text-gray-700">Search</label>
+                    <input type="text" id="search" name="search" value="{{ search_text }}" 
+                           class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                           placeholder="Search description...">
+                </div>
+
+                <div>
+                    <label for="start_date" class="block text-sm font-medium text-gray-700">Start Date</label>
+                    <input type="date" id="start_date" name="start_date" value="{{ start_date }}"
+                           class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                </div>
+
+                <div>
+                    <label for="end_date" class="block text-sm font-medium text-gray-700">End Date</label>
+                    <input type="date" id="end_date" name="end_date" value="{{ end_date }}"
+                           class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                </div>
+
+                <div class="flex items-end">
+                    <button type="submit" class="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        <i class="fas fa-filter mr-2"></i>Apply Filters
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- Tag Histogram -->
+    {% if histogram_json %}
+    <div class="bg-white shadow-sm rounded-lg p-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">Transaction Summary by Tag</h2>
+        <div id="tag-histogram"></div>
+    </div>
+    {% endif %}
+
+    <!-- Transactions Table -->
+    <div class="bg-white shadow-sm rounded-lg overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-lg font-semibold text-gray-900">Transactions</h2>
+        </div>
+        
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            <a href="{{ url_for('analyze', type=transaction_type, search=search_text, start_date=start_date, end_date=end_date, sort_by='accounting_date', sort_order='asc' if sort_by == 'accounting_date' and sort_order == 'desc' else 'desc') }}" class="hover:text-gray-700">
+                                Date {% if sort_by == 'accounting_date' %}<i class="fas fa-sort-{{ 'down' if sort_order == 'desc' else 'up' }}"></i>{% endif %}
+                            </a>
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Description
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Counterparty
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            <a href="{{ url_for('analyze', type=transaction_type, search=search_text, start_date=start_date, end_date=end_date, sort_by='amount', sort_order='asc' if sort_by == 'amount' and sort_order == 'desc' else 'desc') }}" class="hover:text-gray-700">
+                                Amount {% if sort_by == 'amount' %}<i class="fas fa-sort-{{ 'down' if sort_order == 'desc' else 'up' }}"></i>{% endif %}
+                            </a>
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Tag
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Actions
+                        </th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% if transactions %}
+                        {% for transaction in transactions %}
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                {{ transaction.accounting_date.strftime('%Y-%m-%d') }}
+                            </td>
+                            <td class="px-6 py-4 text-sm text-gray-900 max-w-xs truncate" title="{{ transaction.description }}">
+                                {{ transaction.description[:60] }}{% if transaction.description and transaction.description|length > 60 %}...{% endif %}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {{ transaction.counterparty_account if transaction.counterparty_account else '-' }}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-right font-medium {% if transaction.amount > 0 %}text-green-600{% else %}text-red-600{% endif %}">
+                                €{{ "%.2f"|format(transaction.amount) }}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm">
+                                <select class="tag-select block w-full pl-3 pr-10 py-1 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md" data-transaction-id="{{ transaction.id }}">
+                                    <option value="">Select tag...</option>
+                                    {% for tag in tags %}
+                                    <option value="{{ tag.name }}" {% if transaction.tag and transaction.tag.id == tag.id %}selected{% endif %}>{{ tag.name }}</option>
+                                    {% endfor %}
+                                    <option value="__new__">+ Add new tag</option>
+                                </select>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
+                                <button onclick="findSimilar({{ transaction.id }})" class="text-indigo-600 hover:text-indigo-900" title="Find similar transactions">
+                                    <i class="fas fa-search"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="6" class="px-6 py-8 text-center text-sm text-gray-500">
+                                <i class="fas fa-inbox text-gray-300 text-3xl mb-2"></i>
+                                <p>No transactions found. Try adjusting your filters.</p>
+                            </td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        {% if pagination.pages > 1 %}
+        <div class="bg-white px-4 py-3 border-t border-gray-200 sm:px-6">
+            <div class="flex items-center justify-between">
+                <div class="flex-1 flex justify-between sm:hidden">
+                    {% if pagination.has_prev %}
+                    <a href="{{ url_for('analyze', page=pagination.prev_num, type=transaction_type, search=search_text, start_date=start_date, end_date=end_date, sort_by=sort_by, sort_order=sort_order) }}" class="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                        Previous
+                    </a>
+                    {% endif %}
+                    {% if pagination.has_next %}
+                    <a href="{{ url_for('analyze', page=pagination.next_num, type=transaction_type, search=search_text, start_date=start_date, end_date=end_date, sort_by=sort_by, sort_order=sort_order) }}" class="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                        Next
+                    </a>
+                    {% endif %}
+                </div>
+                <div class="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+                    <div>
+                        <p class="text-sm text-gray-700">
+                            Showing <span class="font-medium">{{ (pagination.page - 1) * pagination.per_page + 1 }}</span> to <span class="font-medium">{{ min(pagination.page * pagination.per_page, pagination.total) }}</span> of <span class="font-medium">{{ pagination.total }}</span> results
+                        </p>
+                    </div>
+                    <div>
+                        <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                            {% if pagination.has_prev %}
+                            <a href="{{ url_for('analyze', page=pagination.prev_num, type=transaction_type, search=search_text, start_date=start_date, end_date=end_date, sort_by=sort_by, sort_order=sort_order) }}" class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+                                <i class="fas fa-chevron-left"></i>
+                            </a>
+                            {% endif %}
+                            
+                            {% for page_num in pagination.iter_pages() %}
+                                {% if page_num %}
+                                    <a href="{{ url_for('analyze', page=page_num, type=transaction_type, search=search_text, start_date=start_date, end_date=end_date, sort_by=sort_by, sort_order=sort_order) }}" class="relative inline-flex items-center px-4 py-2 border {% if page_num == pagination.page %}bg-indigo-50 border-indigo-500 text-indigo-600 z-10{% else %}border-gray-300 bg-white text-gray-500 hover:bg-gray-50{% endif %} text-sm font-medium">
+                                        {{ page_num }}
+                                    </a>
+                                {% else %}
+                                    <span class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700">...</span>
+                                {% endif %}
+                            {% endfor %}
+                            
+                            {% if pagination.has_next %}
+                            <a href="{{ url_for('analyze', page=pagination.next_num, type=transaction_type, search=search_text, start_date=start_date, end_date=end_date, sort_by=sort_by, sort_order=sort_order) }}" class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+                                <i class="fas fa-chevron-right"></i>
+                            </a>
+                            {% endif %}
+                        </nav>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Similar Transactions Modal -->
+<div id="similarModal" class="hidden fixed z-10 inset-0 overflow-y-auto">
+    <div class="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+        <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onclick="closeSimilarModal()"></div>
+        <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-3xl sm:w-full">
+            <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <div class="sm:flex sm:items-start">
+                    <div class="w-full">
+                        <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">
+                            Similar Transactions
+                        </h3>
+                        <div id="similarTransactions" class="max-h-96 overflow-y-auto">
+                            <!-- Similar transactions will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                <button type="button" onclick="bulkTagSimilar()" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:ml-3 sm:w-auto sm:text-sm">
+                    Tag Selected
+                </button>
+                <button type="button" onclick="closeSimilarModal()" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if histogram_json %}
+<script>
+    var histogramData = {{ histogram_json|safe }};
+    Plotly.newPlot('tag-histogram', histogramData.data, histogramData.layout);
+</script>
+{% endif %}
+
+<script>
+// Tag selection
+document.querySelectorAll('.tag-select').forEach(select => {
+    select.addEventListener('change', function() {
+        const transactionId = this.dataset.transactionId;
+        let tagName = this.value;
+        
+        if (tagName === '__new__') {
+            tagName = prompt('Enter new tag name:');
+            if (!tagName) {
+                this.value = '';
+                return;
+            }
+        }
+        
+        if (tagName === '') return;
+        
+        fetch('/api/tag-transaction', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                transaction_id: transactionId,
+                tag_name: tagName
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Error tagging transaction: ' + data.message);
+            }
+        });
+    });
+});
+
+let currentSimilarTag = null;
+
+function findSimilar(transactionId) {
+    fetch(`/api/find-similar/${transactionId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                displaySimilarTransactions(data.similar);
+            }
+        });
+}
+
+function displaySimilarTransactions(transactions) {
+    const container = document.getElementById('similarTransactions');
+    
+    if (transactions.length === 0) {
+        container.innerHTML = '<p class="text-gray-500 text-center py-4">No similar transactions found.</p>';
+    } else {
+        let html = '<div class="space-y-2">';
+        transactions.forEach(t => {
+            html += `
+                <label class="flex items-center p-3 border border-gray-200 rounded-md hover:bg-gray-50 cursor-pointer">
+                    <input type="checkbox" class="similar-checkbox h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded" value="${t.id}">
+                    <div class="ml-3 flex-1">
+                        <div class="flex justify-between">
+                            <span class="text-sm font-medium text-gray-900">${t.date}</span>
+                            <span class="text-sm font-medium ${t.amount > 0 ? 'text-green-600' : 'text-red-600'}">€${t.amount.toFixed(2)}</span>
+                        </div>
+                        <p class="text-sm text-gray-500 truncate">${t.description || ''}</p>
+                        ${t.tag ? `<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-800 mt-1">${t.tag}</span>` : ''}
+                    </div>
+                </label>
+            `;
+        });
+        html += '</div>';
+        container.innerHTML = html;
+    }
+    
+    document.getElementById('similarModal').classList.remove('hidden');
+}
+
+function closeSimilarModal() {
+    document.getElementById('similarModal').classList.add('hidden');
+}
+
+function bulkTagSimilar() {
+    const checkedBoxes = document.querySelectorAll('.similar-checkbox:checked');
+    const transactionIds = Array.from(checkedBoxes).map(cb => parseInt(cb.value));
+    
+    if (transactionIds.length === 0) {
+        alert('Please select at least one transaction');
+        return;
+    }
+    
+    const tagName = prompt('Enter tag name for selected transactions:');
+    if (!tagName) return;
+    
+    fetch('/api/bulk-tag', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            transaction_ids: transactionIds,
+            tag_name: tagName
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            closeSimilarModal();
+            location.reload();
+        } else {
+            alert('Error tagging transactions: ' + data.message);
+        }
+    });
+}
+</script>
+{% endblock %}

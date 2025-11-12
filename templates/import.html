@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+
+{% block title %}Import Data - MyFin{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto">
+    <div class="space-y-6">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900">Import Transaction Data</h1>
+            <p class="mt-2 text-sm text-gray-600">Upload your bank CSV file to import transactions</p>
+        </div>
+
+        <div class="bg-white shadow-sm rounded-lg p-6">
+            <form method="POST" enctype="multipart/form-data" class="space-y-6">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        CSV File
+                    </label>
+                    <div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md hover:border-indigo-400 transition-colors">
+                        <div class="space-y-1 text-center">
+                            <i class="fas fa-file-csv text-gray-400 text-5xl mb-3"></i>
+                            <div class="flex text-sm text-gray-600">
+                                <label for="file-upload" class="relative cursor-pointer bg-white rounded-md font-medium text-indigo-600 hover:text-indigo-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-indigo-500">
+                                    <span>Upload a file</span>
+                                    <input id="file-upload" name="file" type="file" accept=".csv" class="sr-only" onchange="updateFileName(this)" required>
+                                </label>
+                                <p class="pl-1">or drag and drop</p>
+                            </div>
+                            <p class="text-xs text-gray-500">
+                                CSV file with semicolon separator
+                            </p>
+                            <p id="file-name" class="text-sm text-indigo-600 font-medium mt-2"></p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-blue-50 border-l-4 border-blue-400 p-4">
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <i class="fas fa-info-circle text-blue-400"></i>
+                        </div>
+                        <div class="ml-3">
+                            <h3 class="text-sm font-medium text-blue-800">CSV Format Requirements</h3>
+                            <div class="mt-2 text-sm text-blue-700">
+                                <p>The CSV file should contain the following columns (semicolon-separated):</p>
+                                <ul class="list-disc list-inside mt-1 space-y-1">
+                                    <li>Numéro de compte (Account Number)</li>
+                                    <li>Nom du compte (Account Name)</li>
+                                    <li>Compte contrepartie (Counterparty Account)</li>
+                                    <li>Numéro de mouvement (Transaction Number)</li>
+                                    <li>Date comptable (Accounting Date - DD/MM/YYYY)</li>
+                                    <li>Date valeur (Value Date - DD/MM/YYYY)</li>
+                                    <li>Montant (Amount with comma as decimal separator)</li>
+                                    <li>Devise (Currency)</li>
+                                    <li>Libellés (Description)</li>
+                                    <li>Détails du mouvement (Details)</li>
+                                    <li>Message</li>
+                                </ul>
+                                <p class="mt-2 font-medium">Duplicate transactions will be automatically skipped.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex justify-end space-x-3">
+                    <a href="{{ url_for('index') }}" class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        Cancel
+                    </a>
+                    <button type="submit" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        <i class="fas fa-upload mr-2"></i>
+                        Import Transactions
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4">
+            <div class="flex">
+                <div class="flex-shrink-0">
+                    <i class="fas fa-exclamation-triangle text-yellow-400"></i>
+                </div>
+                <div class="ml-3">
+                    <h3 class="text-sm font-medium text-yellow-800">Important Note</h3>
+                    <div class="mt-2 text-sm text-yellow-700">
+                        <p>This import functionality is only accessible to admin users. Make sure you review the imported data after the import process completes.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function updateFileName(input) {
+    const fileName = input.files[0]?.name || '';
+    const fileNameDisplay = document.getElementById('file-name');
+    if (fileName) {
+        fileNameDisplay.textContent = `Selected: ${fileName}`;
+    } else {
+        fileNameDisplay.textContent = '';
+    }
+}
+</script>
+{% endblock %}

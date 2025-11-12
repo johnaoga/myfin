@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block title %}Home - MyFin{% endblock %}
+
+{% block content %}
+<div class="space-y-8">
+    <div>
+        <h1 class="text-3xl font-bold text-gray-900">Financial Overview</h1>
+        <p class="mt-2 text-sm text-gray-600">View your financial summary and trends</p>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="grid grid-cols-1 gap-6 sm:grid-cols-3">
+        <a href="{{ url_for('analyze', type='in') }}" class="block bg-white overflow-hidden shadow-sm rounded-lg hover:shadow-md transition-shadow">
+            <div class="p-6">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-arrow-down text-green-600 text-xl"></i>
+                        </div>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-gray-500 truncate">Total Income</dt>
+                            <dd class="flex items-baseline">
+                                <div class="text-2xl font-semibold text-gray-900">
+                                    €{{ "%.2f"|format(total_in) }}
+                                </div>
+                            </dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </a>
+
+        <a href="{{ url_for('analyze', type='out') }}" class="block bg-white overflow-hidden shadow-sm rounded-lg hover:shadow-md transition-shadow">
+            <div class="p-6">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <div class="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-arrow-up text-red-600 text-xl"></i>
+                        </div>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-gray-500 truncate">Total Expenses</dt>
+                            <dd class="flex items-baseline">
+                                <div class="text-2xl font-semibold text-gray-900">
+                                    €{{ "%.2f"|format(total_out) }}
+                                </div>
+                            </dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </a>
+
+        <a href="{{ url_for('analyze') }}" class="block bg-white overflow-hidden shadow-sm rounded-lg hover:shadow-md transition-shadow">
+            <div class="p-6">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <div class="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-balance-scale text-indigo-600 text-xl"></i>
+                        </div>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-gray-500 truncate">Balance</dt>
+                            <dd class="flex items-baseline">
+                                <div class="text-2xl font-semibold {% if balance >= 0 %}text-green-600{% else %}text-red-600{% endif %}">
+                                    €{{ "%.2f"|format(balance) }}
+                                </div>
+                            </dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </a>
+    </div>
+
+    <!-- Cumulative Chart -->
+    {% if plot_json %}
+    <div class="bg-white shadow-sm rounded-lg p-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">Cumulative Trends</h2>
+        <div id="cumulative-chart"></div>
+    </div>
+    {% else %}
+    <div class="bg-white shadow-sm rounded-lg p-6 text-center">
+        <i class="fas fa-chart-line text-gray-300 text-5xl mb-4"></i>
+        <p class="text-gray-500">No transaction data available. Import your first CSV file to get started.</p>
+        {% if current_user.is_admin %}
+        <a href="{{ url_for('import_data') }}" class="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
+            <i class="fas fa-upload mr-2"></i>Import Data
+        </a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+{% if plot_json %}
+<script>
+    var plotData = {{ plot_json|safe }};
+    Plotly.newPlot('cumulative-chart', plotData.data, plotData.layout);
+</script>
+{% endif %}
+{% endblock %}
