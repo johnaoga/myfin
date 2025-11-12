@@ -274,7 +274,14 @@ def find_similar(transaction_id):
         'tag': t.tag.name if t.tag else None
     } for t in similar]
     
-    return jsonify({'success': True, 'similar': results})
+    # Include the original transaction's tag if it exists
+    original_tag = transaction.tag.name if transaction.tag else None
+    
+    return jsonify({
+        'success': True, 
+        'similar': results,
+        'original_tag': original_tag
+    })
 
 @app.route('/api/bulk-tag', methods=['POST'])
 @login_required
@@ -301,6 +308,181 @@ def bulk_tag():
     db.session.commit()
     
     return jsonify({'success': True, 'count': len(transaction_ids)})
+
+@app.route('/api/find-patterns')
+@login_required
+def find_patterns():
+    """Find similar patterns in filtered transaction results"""
+    from collections import defaultdict
+    
+    # Get filter parameters
+    transaction_type = request.args.get('type', 'all')
+    search_text = request.args.get('search', '')
+    start_date = request.args.get('start_date', '')
+    end_date = request.args.get('end_date', '')
+    
+    # Build query (same logic as analyze page)
+    query = Transaction.query
+    
+    if transaction_type == 'in':
+        query = query.filter(Transaction.amount > 0)
+    elif transaction_type == 'out':
+        query = query.filter(Transaction.amount < 0)
+    
+    if search_text:
+        query = query.filter(
+            or_(
+                Transaction.description.ilike(f'%{search_text}%'),
+                Transaction.details.ilike(f'%{search_text}%'),
+                Transaction.account_name.ilike(f'%{search_text}%'),
+                Transaction.counterparty_account.ilike(f'%{search_text}%')
+            )
+        )
+    
+    if start_date:
+        try:
+            start_dt = datetime.strptime(start_date, '%Y-%m-%d').date()
+            query = query.filter(Transaction.accounting_date >= start_dt)
+        except ValueError:
+            pass
+    
+    if end_date:
+        try:
+            end_dt = datetime.strptime(end_date, '%Y-%m-%d').date()
+            query = query.filter(Transaction.accounting_date <= end_dt)
+        except ValueError:
+            pass
+    
+    transactions = query.all()
+    
+    if len(transactions) < 2:
+        return jsonify({'success': True, 'patterns': []})
+    
+    # Group transactions by patterns
+    patterns = []
+    
+    # Pattern 1: Group by counterparty account
+    counterparty_groups = defaultdict(list)
+    for t in transactions:
+        if t.counterparty_account:
+            counterparty_groups[t.counterparty_account].append(t)
+    
+    for counterparty, trans_list in counterparty_groups.items():
+        if len(trans_list) >= 2:  # Only include patterns with 2+ transactions
+            patterns.append({
+                'description': f'Counterparty: {counterparty[:30]}...' if len(counterparty) > 30 else f'Counterparty: {counterparty}',
+                'transactions': [{
+                    'id': t.id,
+                    'date': t.accounting_date.strftime('%Y-%m-%d'),
+                    'amount': t.amount,
+                    'description': t.description,
+                    'tag': t.tag.name if t.tag else None
+                } for t in trans_list]
+            })
+    
+    # Pattern 2: Group by similar amounts (within 1 euro)
+    amount_groups = defaultdict(list)
+    for t in transactions:
+        # Round to nearest euro for grouping
+        rounded_amount = round(t.amount)
+        amount_groups[rounded_amount].append(t)
+    
+    for amount, trans_list in amount_groups.items():
+        if len(trans_list) >= 3:  # Only include patterns with 3+ transactions
+            patterns.append({
+                'description': f'Similar amount: ~€{amount:.2f}',
+                'transactions': [{
+                    'id': t.id,
+                    'date': t.accounting_date.strftime('%Y-%m-%d'),
+                    'amount': t.amount,
+                    'description': t.description,
+                    'tag': t.tag.name if t.tag else None
+                } for t in trans_list]
+            })
+    
+    # Pattern 3: Group by description keywords (first 20 chars)
+    desc_groups = defaultdict(list)
+    for t in transactions:
+        if t.description:
+            # Use first 20 chars as pattern key
+            key = t.description[:20].strip().lower()
+            if key:
+                desc_groups[key].append(t)
+    
+    for desc_key, trans_list in desc_groups.items():
+        if len(trans_list) >= 2:  # Only include patterns with 2+ transactions
+            patterns.append({
+                'description': f'Similar description: "{desc_key}..."',
+                'transactions': [{
+                    'id': t.id,
+                    'date': t.accounting_date.strftime('%Y-%m-%d'),
+                    'amount': t.amount,
+                    'description': t.description,
+                    'tag': t.tag.name if t.tag else None
+                } for t in trans_list]
+            })
+    
+    # Limit to top 10 patterns by transaction count
+    patterns.sort(key=lambda p: len(p['transactions']), reverse=True)
+    patterns = patterns[:10]
+    
+    return jsonify({'success': True, 'patterns': patterns})
+
+@app.route('/api/get-search-results')
+@login_required
+def get_search_results():
+    """Get all transactions matching current search filters"""
+    # Get filter parameters
+    transaction_type = request.args.get('type', 'all')
+    search_text = request.args.get('search', '')
+    start_date = request.args.get('start_date', '')
+    end_date = request.args.get('end_date', '')
+    
+    # Build query (same logic as analyze page)
+    query = Transaction.query
+    
+    if transaction_type == 'in':
+        query = query.filter(Transaction.amount > 0)
+    elif transaction_type == 'out':
+        query = query.filter(Transaction.amount < 0)
+    
+    if search_text:
+        query = query.filter(
+            or_(
+                Transaction.description.ilike(f'%{search_text}%'),
+                Transaction.details.ilike(f'%{search_text}%'),
+                Transaction.account_name.ilike(f'%{search_text}%'),
+                Transaction.counterparty_account.ilike(f'%{search_text}%')
+            )
+        )
+    
+    if start_date:
+        try:
+            start_dt = datetime.strptime(start_date, '%Y-%m-%d').date()
+            query = query.filter(Transaction.accounting_date >= start_dt)
+        except ValueError:
+            pass
+    
+    if end_date:
+        try:
+            end_dt = datetime.strptime(end_date, '%Y-%m-%d').date()
+            query = query.filter(Transaction.accounting_date <= end_dt)
+        except ValueError:
+            pass
+    
+    # Order by date descending
+    transactions = query.order_by(Transaction.accounting_date.desc()).all()
+    
+    # Format results
+    results = [{
+        'id': t.id,
+        'date': t.accounting_date.strftime('%Y-%m-%d'),
+        'amount': t.amount,
+        'description': t.description,
+        'tag': t.tag.name if t.tag else None
+    } for t in transactions]
+    
+    return jsonify({'success': True, 'transactions': results})
 
 @app.route('/import', methods=['GET', 'POST'])
 @login_required
