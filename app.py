@@ -27,7 +27,7 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(int(user_id))
+    return db.session.get(User, int(user_id))
 
 def admin_required(f):
     @wraps(f)
@@ -233,7 +233,7 @@ def tag_transaction():
     if not transaction_id or not tag_name:
         return jsonify({'success': False, 'message': 'Missing data'}), 400
     
-    transaction = Transaction.query.get(transaction_id)
+    transaction = db.session.get(Transaction, transaction_id)
     if not transaction:
         return jsonify({'success': False, 'message': 'Transaction not found'}), 404
     
@@ -252,7 +252,9 @@ def tag_transaction():
 @app.route('/api/find-similar/<int:transaction_id>')
 @login_required
 def find_similar(transaction_id):
-    transaction = Transaction.query.get_or_404(transaction_id)
+    transaction = db.session.get(Transaction, transaction_id)
+    if not transaction:
+        return jsonify({'success': False, 'message': 'Transaction not found'}), 404
     
     # Find similar transactions based on description and amount
     similar = Transaction.query.filter(
@@ -316,8 +318,29 @@ def import_data():
         
         if file and file.filename.endswith('.csv'):
             try:
-                # Read CSV with semicolon separator
-                df = pd.read_csv(file, sep=';', encoding='latin-1')
+                # Read CSV with semicolon separator - try different encodings
+                # Try UTF-8 with BOM first, then UTF-8, then latin-1
+                encodings = ['utf-8-sig', 'utf-8', 'latin-1', 'iso-8859-1', 'cp1252']
+                df = None
+                last_error = None
+                
+                for encoding in encodings:
+                    try:
+                        file.seek(0)  # Reset file pointer
+                        df = pd.read_csv(file, sep=';', encoding=encoding)
+                        # Verify we have the expected columns
+                        if 'Numéro de compte' in df.columns or any('compte' in col.lower() for col in df.columns):
+                            break
+                    except Exception as e:
+                        last_error = e
+                        continue
+                
+                if df is None:
+                    raise Exception(f'Could not read CSV with any encoding. Last error: {last_error}')
+                
+                # Log successful encoding and column names for debugging
+                print(f"Successfully read CSV with encoding: {encoding}")
+                print(f"Columns found: {list(df.columns)}")
                 
                 imported_count = 0
                 skipped_count = 0
