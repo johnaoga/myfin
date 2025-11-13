@@ -11,7 +11,7 @@ from datetime import datetime
 from sqlalchemy import or_, func
 
 from config import Config
-from models import db, User, Transaction, Tag
+from models import db, User, Transaction, Tag, Pattern
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -383,7 +383,7 @@ def summary():
         tag_stats = db.session.query(
             Tag.name,
             Tag.color,
-            func.sum(func.abs(Transaction.amount)).label('total_amount'),
+            func.sum(Transaction.amount).label('total_amount'),
             func.count(Transaction.id).label('count')
         ).join(Transaction).group_by(Tag.id).all()
         
@@ -414,6 +414,38 @@ def summary():
                          granularity=granularity,
                          periods=periods_data,
                          tag_stats=tag_stats)
+
+@app.route('/patterns')
+@login_required
+def patterns():
+    """Pattern analysis and management page"""
+    # Get all validated patterns
+    all_patterns = Pattern.query.filter_by(is_active=True).order_by(Pattern.merge_id, Pattern.created_at.desc()).all()
+    
+    # Group patterns by merge_id
+    from collections import defaultdict
+    merged_groups = defaultdict(list)
+    for p in all_patterns:
+        merged_groups[p.merge_id or p.id].append(p)
+    
+    # Calculate totals (count merged patterns once)
+    total_recurrent_income = 0
+    total_recurrent_expense = 0
+    
+    for merge_id, group in merged_groups.items():
+        total_amount = sum(p.total_amount for p in group)
+        pattern_type = group[0].pattern_type
+        
+        if pattern_type == 'recurrent_income':
+            total_recurrent_income += total_amount
+        elif pattern_type == 'recurrent_expense':
+            total_recurrent_expense += abs(total_amount)  # Take abs for display
+    
+    return render_template('patterns.html',
+                         patterns=all_patterns,
+                         merged_groups=merged_groups,
+                         total_recurrent_income=total_recurrent_income,
+                         total_recurrent_expense=total_recurrent_expense)
 
 @app.route('/api/tag-transaction', methods=['POST'])
 @login_required
@@ -675,6 +707,152 @@ def get_search_results():
     } for t in transactions]
     
     return jsonify({'success': True, 'transactions': results})
+
+@app.route('/api/detect-patterns')
+@login_required
+def detect_patterns():
+    """Detect recurring patterns in transactions"""
+    from collections import defaultdict
+    from dateutil.relativedelta import relativedelta
+    
+    # Get all transactions
+    transactions = Transaction.query.order_by(Transaction.accounting_date).all()
+    
+    if len(transactions) < 10:
+        return jsonify({'success': True, 'patterns': []})
+    
+    detected_patterns = []
+    
+    # Group by similar description (first 30 chars) and similar amount
+    grouped = defaultdict(list)
+    
+    for t in transactions:
+        if t.description:
+            # Create key from description prefix and rounded amount
+            desc_key = t.description[:30].strip().lower()
+            amount_key = round(t.amount, -1)  # Round to nearest 10
+            key = (desc_key, amount_key)
+            grouped[key].append(t)
+    
+    # Analyze each group for monthly recurrence
+    for (desc, amount), trans_list in grouped.items():
+        if len(trans_list) >= 3:  # At least 3 occurrences
+            # Check if they're roughly monthly recurring
+            dates = sorted([t.accounting_date for t in trans_list])
+            intervals = []
+            
+            for i in range(1, len(dates)):
+                delta = (dates[i].year - dates[i-1].year) * 12 + (dates[i].month - dates[i-1].month)
+                intervals.append(delta)
+            
+            # If most intervals are around 1 month (±1 day variance is OK)
+            if intervals and sum(1 for i in intervals if 0 <= i <= 2) / len(intervals) > 0.6:
+                avg_amount = sum(t.amount for t in trans_list) / len(trans_list)
+                pattern_type = 'recurrent_income' if trans_list[0].amount > 0 else 'recurrent_expense'
+                
+                detected_patterns.append({
+                    'name': desc[:50],
+                    'description': f'Recurring monthly transaction: {desc[:50]}',
+                    'pattern_type': pattern_type,
+                    'frequency': 'monthly',
+                    'average_amount': round(avg_amount, 2),
+                    'transaction_count': len(trans_list),
+                    'total_amount': round(sum(t.amount for t in trans_list), 2),
+                    'transactions': [{
+                        'id': t.id,
+                        'date': t.accounting_date.strftime('%Y-%m-%d'),
+                        'amount': t.amount,
+                        'description': t.description,
+                        'counterparty': t.counterparty_account
+                    } for t in trans_list]
+                })
+    
+    # Sort by total amount descending
+    detected_patterns.sort(key=lambda p: p['total_amount'], reverse=True)
+    
+    return jsonify({'success': True, 'patterns': detected_patterns})
+
+@app.route('/api/validate-pattern', methods=['POST'])
+@login_required
+def validate_pattern():
+    """Validate and save a detected pattern"""
+    data = request.get_json()
+    
+    pattern_name = data.get('name')
+    pattern_description = data.get('description')
+    pattern_type = data.get('pattern_type')
+    frequency = data.get('frequency')
+    average_amount = data.get('average_amount')
+    transaction_ids = data.get('transaction_ids', [])
+    
+    if not pattern_name or not transaction_ids:
+        return jsonify({'success': False, 'message': 'Missing required data'}), 400
+    
+    # Create pattern
+    pattern = Pattern(
+        name=pattern_name,
+        description=pattern_description,
+        pattern_type=pattern_type,
+        frequency=frequency,
+        average_amount=average_amount,
+        validated_at=datetime.utcnow()
+    )
+    
+    # Add transactions to pattern
+    for trans_id in transaction_ids:
+        transaction = db.session.get(Transaction, trans_id)
+        if transaction:
+            pattern.transactions.append(transaction)
+    
+    db.session.add(pattern)
+    db.session.flush()  # Flush to get the pattern.id
+    
+    # Set initial merge_id to pattern's own id
+    pattern.merge_id = pattern.id
+    
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'pattern_id': pattern.id,
+        'message': f'Pattern "{pattern_name}" validated with {len(transaction_ids)} transactions'
+    })
+
+@app.route('/api/delete-pattern/<int:pattern_id>', methods=['DELETE'])
+@login_required
+def delete_pattern(pattern_id):
+    """Delete a validated pattern"""
+    pattern = db.session.get(Pattern, pattern_id)
+    
+    if not pattern:
+        return jsonify({'success': False, 'message': 'Pattern not found'}), 404
+    
+    pattern.is_active = False
+    db.session.commit()
+    
+    return jsonify({'success': True, 'message': 'Pattern deleted'})
+
+@app.route('/api/update-pattern-merge/<int:pattern_id>', methods=['POST'])
+@login_required
+def update_pattern_merge(pattern_id):
+    """Update the merge_id of a pattern"""
+    data = request.get_json()
+    merge_id = data.get('merge_id')
+    
+    if merge_id is None:
+        return jsonify({'success': False, 'message': 'merge_id is required'}), 400
+    
+    pattern = db.session.get(Pattern, pattern_id)
+    
+    if not pattern:
+        return jsonify({'success': False, 'message': 'Pattern not found'}), 404
+    
+    try:
+        pattern.merge_id = int(merge_id)
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Merge ID updated'})
+    except ValueError:
+        return jsonify({'success': False, 'message': 'Invalid merge_id format'}), 400
 
 @app.route('/import', methods=['GET', 'POST'])
 @login_required

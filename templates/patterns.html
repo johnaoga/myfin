@@ -1,0 +1,377 @@
+{% extends "base.html" %}
+
+{% block title %}Pattern Analysis - MyFin{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <!-- Header -->
+    <div class="mb-8 flex items-center justify-between">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900">Pattern Analysis</h1>
+            <p class="mt-2 text-sm text-gray-600">Identify and manage recurring transactions</p>
+        </div>
+        <button onclick="analyzePatterns()" class="inline-flex items-center px-6 py-3 border border-transparent rounded-md shadow-sm text-base font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+            <i class="fas fa-search mr-2"></i>
+            Analyze Patterns
+        </button>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="flex items-center">
+                <div class="flex-shrink-0 bg-green-100 rounded-md p-3">
+                    <i class="fas fa-arrow-down text-green-600 text-2xl"></i>
+                </div>
+                <div class="ml-5">
+                    <dt class="text-sm font-medium text-gray-500 truncate">Total Recurrent Income</dt>
+                    <dd class="mt-1 text-3xl font-semibold text-gray-900">€{{ "%.2f"|format(total_recurrent_income) }}</dd>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="flex items-center">
+                <div class="flex-shrink-0 bg-red-100 rounded-md p-3">
+                    <i class="fas fa-arrow-up text-red-600 text-2xl"></i>
+                </div>
+                <div class="ml-5">
+                    <dt class="text-sm font-medium text-gray-500 truncate">Total Recurrent Expenses</dt>
+                    <dd class="mt-1 text-3xl font-semibold text-gray-900">€{{ "%.2f"|format(total_recurrent_expense) }}</dd>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="flex items-center">
+                <div class="flex-shrink-0 bg-indigo-100 rounded-md p-3">
+                    <i class="fas fa-layer-group text-indigo-600 text-2xl"></i>
+                </div>
+                <div class="ml-5">
+                    <dt class="text-sm font-medium text-gray-500 truncate">Patterns Identified</dt>
+                    <dd class="mt-1 text-3xl font-semibold text-gray-900">{{ patterns|length }}</dd>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Validated Patterns -->
+    {% if patterns %}
+    <div class="bg-white shadow-sm rounded-lg overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-lg font-semibold text-gray-900">Validated Patterns</h2>
+        </div>
+        
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Pattern Name
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Merge ID
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Type
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Frequency
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Avg Amount
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Total Amount
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Transactions
+                        </th>
+                        <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Actions
+                        </th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for pattern in patterns %}
+                    <tr class="hover:bg-gray-50 {% if loop.index0 > 0 and patterns[loop.index0-1].merge_id == pattern.merge_id %}border-l-4 border-l-indigo-400{% elif merged_groups[pattern.merge_id]|length > 1 %}border-l-4 border-l-indigo-400{% endif %}">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {{ pattern.name }}
+                            {% if merged_groups[pattern.merge_id]|length > 1 %}
+                            <span class="ml-2 px-2 py-0.5 text-xs bg-indigo-100 text-indigo-700 rounded">Merged</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center">
+                            <input type="number" 
+                                   value="{{ pattern.merge_id or pattern.id }}" 
+                                   onchange="updateMergeId({{ pattern.id }}, this.value)"
+                                   class="w-20 px-2 py-1 text-sm text-center border border-gray-300 rounded focus:ring-indigo-500 focus:border-indigo-500">
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">
+                            <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full {{ 'bg-green-100 text-green-800' if pattern.pattern_type == 'recurrent_income' else 'bg-red-100 text-red-800' }}">
+                                {{ pattern.pattern_type.replace('_', ' ').title() }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {{ pattern.frequency.title() }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900">
+                            €{{ "%.2f"|format((pattern.average_amount or 0)|abs) }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-gray-900">
+                            €{{ "%.2f"|format(pattern.total_amount|abs) }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-500">
+                            {{ pattern.transaction_count }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
+                            <button onclick="deletePattern({{ pattern.id }})" class="text-red-600 hover:text-red-900">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <div class="bg-white shadow-sm rounded-lg p-12 text-center">
+        <i class="fas fa-search text-gray-400 text-5xl mb-4"></i>
+        <h3 class="text-lg font-medium text-gray-900 mb-2">No Patterns Yet</h3>
+        <p class="text-gray-500 mb-6">Click "Analyze Patterns" to detect recurring transactions</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Pattern Validation Modal -->
+<div id="patternModal" class="hidden fixed z-10 inset-0 overflow-y-auto">
+    <div class="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+        <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onclick="closePatternModal()"></div>
+        <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full">
+            <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <div class="sm:flex sm:items-start">
+                    <div class="w-full">
+                        <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">
+                            <i class="fas fa-magic text-indigo-600 mr-2"></i>
+                            Detected Patterns - Validate & Save
+                        </h3>
+                        
+                        <div id="detectedPatterns" class="max-h-96 overflow-y-auto">
+                            <!-- Patterns will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                <button type="button" onclick="closePatternModal()" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:w-auto sm:text-sm">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function analyzePatterns() {
+    const modal = document.getElementById('patternModal');
+    const container = document.getElementById('detectedPatterns');
+    
+    container.innerHTML = '<div class="text-center py-8"><i class="fas fa-spinner fa-spin text-indigo-600 text-3xl mb-2"></i><p class="text-gray-500">Analyzing transactions...</p></div>';
+    modal.classList.remove('hidden');
+    
+    fetch('/api/detect-patterns')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                displayDetectedPatterns(data.patterns);
+            } else {
+                container.innerHTML = '<p class="text-red-500 text-center py-4">Error detecting patterns</p>';
+            }
+        })
+        .catch(error => {
+            container.innerHTML = '<p class="text-red-500 text-center py-4">Error analyzing data</p>';
+        });
+}
+
+function displayDetectedPatterns(patterns) {
+    const container = document.getElementById('detectedPatterns');
+    
+    if (!patterns || patterns.length === 0) {
+        container.innerHTML = '<p class="text-gray-500 text-center py-4">No recurring patterns detected. Try importing more transaction data.</p>';
+        return;
+    }
+    
+    let html = '<div class="space-y-4">';
+    
+    patterns.forEach((pattern, index) => {
+        html += `
+            <div class="border border-gray-300 rounded-lg p-4 bg-gray-50" id="pattern-${index}">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex-1">
+                        <h4 class="font-semibold text-gray-900 mb-1">
+                            <i class="fas fa-sync text-indigo-600 mr-2"></i>
+                            ${pattern.name}
+                        </h4>
+                        <p class="text-sm text-gray-600">${pattern.description}</p>
+                        <div class="flex items-center space-x-4 mt-2">
+                            <span class="px-2 py-1 text-xs font-medium rounded-full ${pattern.pattern_type === 'recurrent_income' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
+                                ${pattern.pattern_type.replace('_', ' ').toUpperCase()}
+                            </span>
+                            <span class="text-sm text-gray-600">
+                                <strong>${pattern.frequency.toUpperCase()}</strong> | 
+                                Avg: €${pattern.average_amount.toFixed(2)} | 
+                                Total: €${pattern.total_amount.toFixed(2)}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-sm font-medium text-gray-700">${pattern.transaction_count} Transactions</span>
+                        <button onclick="selectAllInPattern(${index})" class="text-sm text-indigo-600 hover:text-indigo-800">
+                            Select All
+                        </button>
+                    </div>
+                    <div class="space-y-1 max-h-40 overflow-y-auto border border-gray-200 rounded p-2 bg-white">
+        `;
+        
+        pattern.transactions.forEach(t => {
+            html += `
+                <label class="flex items-center p-2 hover:bg-gray-50 rounded cursor-pointer">
+                    <input type="checkbox" class="pattern-${index}-checkbox h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded" value="${t.id}" checked>
+                    <div class="ml-3 flex-1 flex items-center justify-between">
+                        <div class="flex-1">
+                            <span class="text-xs text-gray-500">${t.date}</span>
+                            <p class="text-sm text-gray-700">${t.description || 'No description'}</p>
+                        </div>
+                        <span class="text-sm font-medium ${t.amount > 0 ? 'text-green-600' : 'text-red-600'} ml-3">€${t.amount.toFixed(2)}</span>
+                    </div>
+                </label>
+            `;
+        });
+        
+        html += `
+                    </div>
+                </div>
+                
+                <button onclick="validatePattern(${index}, ${JSON.stringify(pattern).replace(/"/g, '&quot;')})" 
+                        class="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                    <i class="fas fa-check mr-2"></i>Validate & Save Pattern
+                </button>
+            </div>
+        `;
+    });
+    
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+function selectAllInPattern(index) {
+    document.querySelectorAll(`.pattern-${index}-checkbox`).forEach(cb => {
+        cb.checked = true;
+    });
+}
+
+function validatePattern(index, patternData) {
+    const checkedBoxes = document.querySelectorAll(`.pattern-${index}-checkbox:checked`);
+    const transactionIds = Array.from(checkedBoxes).map(cb => parseInt(cb.value));
+    
+    if (transactionIds.length === 0) {
+        alert('Please select at least one transaction');
+        return;
+    }
+    
+    if (!confirm(`Validate this pattern with ${transactionIds.length} transaction(s)?`)) {
+        return;
+    }
+    
+    fetch('/api/validate-pattern', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            name: patternData.name,
+            description: patternData.description,
+            pattern_type: patternData.pattern_type,
+            frequency: patternData.frequency,
+            average_amount: patternData.average_amount,
+            transaction_ids: transactionIds
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+            document.getElementById(`pattern-${index}`).remove();
+            
+            // Check if no more patterns
+            if (document.querySelectorAll('[id^="pattern-"]').length === 0) {
+                closePatternModal();
+                location.reload();
+            }
+        } else {
+            alert('Error validating pattern: ' + data.message);
+        }
+    });
+}
+
+function closePatternModal() {
+    document.getElementById('patternModal').classList.add('hidden');
+}
+
+function deletePattern(patternId) {
+    if (!confirm('Are you sure you want to delete this pattern?')) {
+        return;
+    }
+    
+    fetch(`/api/delete-pattern/${patternId}`, {
+        method: 'DELETE'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Error deleting pattern: ' + data.message);
+        }
+    });
+}
+
+function updateMergeId(patternId, newMergeId) {
+    // Validate input
+    const mergeId = parseInt(newMergeId);
+    if (isNaN(mergeId) || mergeId < 1) {
+        alert('Please enter a valid merge ID (positive number)');
+        location.reload();
+        return;
+    }
+    
+    fetch(`/api/update-pattern-merge/${patternId}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            merge_id: mergeId
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Reload to show updated grouping
+            location.reload();
+        } else {
+            alert('Error updating merge ID: ' + data.message);
+            location.reload();
+        }
+    })
+    .catch(error => {
+        alert('Error updating merge ID');
+        location.reload();
+    });
+}
+</script>
+{% endblock %}

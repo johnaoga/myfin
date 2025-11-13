@@ -70,3 +70,39 @@ class Tag(db.Model):
     
     def __repr__(self):
         return f'<Tag {self.name}>'
+
+
+# Association table for pattern-transaction many-to-many relationship
+pattern_transactions = db.Table('pattern_transactions',
+    db.Column('pattern_id', db.Integer, db.ForeignKey('patterns.id'), primary_key=True),
+    db.Column('transaction_id', db.Integer, db.ForeignKey('transactions.id'), primary_key=True)
+)
+
+
+class Pattern(db.Model):
+    __tablename__ = 'patterns'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text)
+    pattern_type = db.Column(db.String(50))  # 'recurrent_income', 'recurrent_expense', 'seasonal', etc.
+    frequency = db.Column(db.String(50))  # 'monthly', 'weekly', 'yearly'
+    average_amount = db.Column(db.Float)
+    merge_id = db.Column(db.Integer)  # Group patterns with same merge_id together
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    validated_at = db.Column(db.DateTime)
+    
+    # Relationship to transactions
+    transactions = db.relationship('Transaction', secondary=pattern_transactions, backref='patterns')
+    
+    @property
+    def total_amount(self):
+        return sum(t.amount for t in self.transactions)
+    
+    @property
+    def transaction_count(self):
+        return len(self.transactions)
+    
+    def __repr__(self):
+        return f'<Pattern {self.name}: {self.pattern_type}>'

@@ -29,6 +29,9 @@
                         <a href="{{ url_for('summary') }}" class="{% if request.endpoint == 'summary' %}border-indigo-500 text-gray-900{% else %}border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700{% endif %} inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
                             Summary
                         </a>
+                        <a href="{{ url_for('patterns') }}" class="{% if request.endpoint == 'patterns' %}border-indigo-500 text-gray-900{% else %}border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700{% endif %} inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                            Patterns
+                        </a>
                         {% if current_user.is_admin %}
                         <a href="{{ url_for('import_data') }}" class="{% if request.endpoint == 'import_data' %}border-indigo-500 text-gray-900{% else %}border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700{% endif %} inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
                             Import Data

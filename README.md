@@ -22,7 +22,7 @@ A Flask-based web application for managing and analyzing personal finance data f
 - **Find Patterns**: AI-powered pattern detection to group similar transactions
 - **Pagination**: Browse through large transaction datasets efficiently
 
-### Summary Analysis (NEW)
+### Summary Analysis
 - **Multi-Granularity Views**: Analyze finances by day, week, month, or year
 - **Database Views**: Optimized SQL views for fast performance on large datasets
 - **Comparative Metrics**:
@@ -31,6 +31,17 @@ A Flask-based web application for managing and analyzing personal finance data f
   - Color-coded indicators (green = below average, red = above average)
 - **Tag Distribution**: View spending by category at each granularity level
 - **Period Details**: Income, expenses, balance, and transaction counts per period
+
+### Pattern Analysis (NEW)
+- **Intelligent Detection**: AI-powered detection of recurring transactions
+- **Monthly Patterns**: Identifies transactions that occur regularly each month
+- **Validation Wizard**: Interactive interface to review and validate detected patterns
+- **Transaction Selection**: Choose which transactions belong to each pattern
+- **Recurrent Tracking**:
+  - Total recurrent income summary
+  - Total recurrent expenses summary
+  - Pattern count and details
+- **Pattern Management**: Save, view, and delete validated patterns
 
 ### Data Import
 - **CSV Import**: Admin-only feature to import bank CSV files
@@ -78,6 +89,12 @@ A Flask-based web application for managing and analyzing personal finance data f
    python init_views.py
    ```
    This creates optimized SQL views for the Summary Analysis feature.
+
+7. **Migrate database for pattern analysis**:
+   ```bash
+   python migrate_patterns.py
+   ```
+   This creates the pattern tables for recurring transaction detection.
 
 ## Running the Application
 
