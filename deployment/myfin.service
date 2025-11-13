@@ -1,0 +1,33 @@
+# /etc/systemd/system/myfin.service
+# Adjust paths and usernames before installing on the server.
+
+[Unit]
+Description=Gunicorn instance to serve MyFin Flask app
+After=network.target
+
+[Service]
+User=jaoga
+Group=www-data
+WorkingDirectory=/home/jaoga/repositories/myfin
+EnvironmentFile=/home/jaoga/repositories/myfin/.env
+Environment="PATH=/home/jaoga/repositories/myfin/venv/bin"
+RuntimeDirectory=myfin
+RuntimeDirectoryMode=0755
+ExecStart=/home/jaoga/repositories/myfin/venv/bin/gunicorn \
+    --config deployment/gunicorn.conf.py \
+    app:app
+ExecReload=/bin/kill -s HUP $MAINPID
+KillMode=mixed
+TimeoutStopSec=5
+PrivateTmp=true
+Restart=on-failure
+RestartSec=10
+
+# Security hardening
+NoNewPrivileges=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+
+[Install]
+WantedBy=multi-user.target
