@@ -223,6 +223,198 @@ def analyze():
                          sort_order=sort_order,
                          histogram_json=histogram_json)
 
+@app.route('/summary')
+@login_required
+def summary():
+    """Summary analysis page with different granularities"""
+    from sqlalchemy import text
+    from collections import defaultdict
+    import calendar
+    
+    granularity = request.args.get('granularity', 'month')  # day, week, month, year
+    
+    # Map granularity to view name
+    view_map = {
+        'day': 'daily_summary',
+        'week': 'weekly_summary',
+        'month': 'monthly_summary',
+        'year': 'yearly_summary'
+    }
+    
+    if granularity not in view_map:
+        granularity = 'month'
+    
+    view_name = view_map[granularity]
+    
+    # Query the view
+    try:
+        query = text(f"""
+            SELECT 
+                period,
+                year,
+                {f"month," if granularity in ['month', 'day'] else ''}
+                {f"week," if granularity == 'week' else ''}
+                {f"day, day_of_week," if granularity == 'day' else ''}
+                total_in,
+                total_out,
+                balance,
+                transaction_count
+                {f", period_start, period_end" if granularity != 'day' else ''}
+            FROM {view_name}
+            ORDER BY period DESC
+        """)
+        
+        result = db.session.execute(query)
+        periods_data = []
+        
+        for row in result:
+            # Parse row based on granularity
+            if granularity == 'day':
+                # Columns: period, year, month, day, day_of_week, total_in, total_out, balance, transaction_count
+                period_data = {
+                    'period': row[0],
+                    'year': row[1],
+                    'month': row[2],
+                    'week': None,
+                    'day': row[3],
+                    'day_of_week': row[4],
+                    'total_in': row[5],
+                    'total_out': row[6],
+                    'balance': row[7],
+                    'transaction_count': row[8],
+                }
+            elif granularity == 'week':
+                # Columns: period, year, week, total_in, total_out, balance, transaction_count, period_start, period_end
+                period_data = {
+                    'period': row[0],
+                    'year': row[1],
+                    'month': None,
+                    'week': row[2],
+                    'day': None,
+                    'day_of_week': None,
+                    'total_in': row[3],
+                    'total_out': row[4],
+                    'balance': row[5],
+                    'transaction_count': row[6],
+                }
+            elif granularity == 'month':
+                # Columns: period, year, month, total_in, total_out, balance, transaction_count, period_start, period_end
+                period_data = {
+                    'period': row[0],
+                    'year': row[1],
+                    'month': row[2],
+                    'week': None,
+                    'day': None,
+                    'day_of_week': None,
+                    'total_in': row[3],
+                    'total_out': row[4],
+                    'balance': row[5],
+                    'transaction_count': row[6],
+                }
+            else:  # year
+                # Columns: period, year, total_in, total_out, balance, transaction_count, period_start, period_end
+                period_data = {
+                    'period': row[0],
+                    'year': row[1],
+                    'month': None,
+                    'week': None,
+                    'day': None,
+                    'day_of_week': None,
+                    'total_in': row[2],
+                    'total_out': row[3],
+                    'balance': row[4],
+                    'transaction_count': row[5],
+                }
+            
+            periods_data.append(period_data)
+        
+        # Calculate averages
+        if periods_data:
+            # Overall averages
+            total_periods = len(periods_data)
+            avg_in = sum(p['total_in'] for p in periods_data) / total_periods if total_periods > 0 else 0
+            avg_out = sum(p['total_out'] for p in periods_data) / total_periods if total_periods > 0 else 0
+            
+            # Same-period averages (e.g., all Aprils, all Mondays, etc.)
+            period_groups = defaultdict(list)
+            
+            for period in periods_data:
+                if granularity == 'month':
+                    # Group by month name (all Januaries, all Februaries, etc.)
+                    key = period['month']
+                elif granularity == 'week':
+                    # Group by week number
+                    key = period['week']
+                elif granularity == 'day':
+                    # Group by day of week
+                    key = period['day_of_week']
+                else:  # year
+                    key = 'all'
+                
+                period_groups[key].append(period)
+            
+            # Calculate same-period averages
+            same_period_avg = {}
+            for key, group in period_groups.items():
+                same_period_avg[key] = {
+                    'avg_in': sum(p['total_in'] for p in group) / len(group),
+                    'avg_out': sum(p['total_out'] for p in group) / len(group),
+                }
+            
+            # Add averages to each period
+            for period in periods_data:
+                period['overall_avg_in'] = avg_in
+                period['overall_avg_out'] = avg_out
+                
+                if granularity == 'month':
+                    key = period['month']
+                elif granularity == 'week':
+                    key = period['week']
+                elif granularity == 'day':
+                    key = period['day_of_week']
+                else:
+                    key = 'all'
+                
+                period['same_period_avg_in'] = same_period_avg[key]['avg_in']
+                period['same_period_avg_out'] = same_period_avg[key]['avg_out']
+        
+        # Get tag distribution for selected granularity
+        # For now, we'll get overall tag distribution and can filter by date in template
+        tag_stats = db.session.query(
+            Tag.name,
+            Tag.color,
+            func.sum(func.abs(Transaction.amount)).label('total_amount'),
+            func.count(Transaction.id).label('count')
+        ).join(Transaction).group_by(Tag.id).all()
+        
+        # Format period labels
+        for period in periods_data:
+            if granularity == 'month':
+                month_num = int(period['month'])
+                month_name = calendar.month_name[month_num]
+                period['label'] = f"{month_name} {period['year']}"
+                period['same_period_label'] = month_name
+            elif granularity == 'week':
+                period['label'] = f"Week {period['week']}, {period['year']}"
+                period['same_period_label'] = f"Week {period['week']}"
+            elif granularity == 'day':
+                day_names = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+                period['label'] = period['period']
+                period['same_period_label'] = day_names[int(period['day_of_week'])]
+            else:  # year
+                period['label'] = period['period']
+                period['same_period_label'] = period['period']
+        
+    except Exception as e:
+        flash(f'Error loading summary data: {str(e)}. Please run init_views.py to create database views.', 'danger')
+        periods_data = []
+        tag_stats = []
+    
+    return render_template('summary.html',
+                         granularity=granularity,
+                         periods=periods_data,
+                         tag_stats=tag_stats)
+
 @app.route('/api/tag-transaction', methods=['POST'])
 @login_required
 def tag_transaction():

@@ -18,7 +18,19 @@ A Flask-based web application for managing and analyzing personal finance data f
   - Visual histogram showing transaction totals by tag
 - **Find Similar**: Search for similar transactions based on description, counterparty, or amount
 - **Bulk Tagging**: Tag multiple similar transactions at once
+- **Tag the Search**: Bulk tag all transactions matching current filters
+- **Find Patterns**: AI-powered pattern detection to group similar transactions
 - **Pagination**: Browse through large transaction datasets efficiently
+
+### Summary Analysis (NEW)
+- **Multi-Granularity Views**: Analyze finances by day, week, month, or year
+- **Database Views**: Optimized SQL views for fast performance on large datasets
+- **Comparative Metrics**:
+  - Overall average comparison (across all periods)
+  - Same-period average (e.g., all Aprils, all Mondays)
+  - Color-coded indicators (green = below average, red = above average)
+- **Tag Distribution**: View spending by category at each granularity level
+- **Period Details**: Income, expenses, balance, and transaction counts per period
 
 ### Data Import
 - **CSV Import**: Admin-only feature to import bank CSV files
@@ -60,6 +72,12 @@ A Flask-based web application for managing and analyzing personal finance data f
    flask --app app create-admin
    ```
    Follow the prompts to enter username and password.
+
+6. **Initialize database views for summary analysis**:
+   ```bash
+   python init_views.py
+   ```
+   This creates optimized SQL views for the Summary Analysis feature.
 
 ## Running the Application
 
