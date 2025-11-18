@@ -1,5 +1,4 @@
 data
 venv
 __pycache__
-instance
 test_csv.py
